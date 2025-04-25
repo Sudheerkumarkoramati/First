@@ -1,0 +1,125 @@
+from typing import Any,Dict
+from fastapi.params import Depends
+from typing_extensions import Annotated
+from fastapi import FastAPI, HTTPException,Depends,Query,Path
+from models import ItemPayload,Customer,Bill
+from datetime import date
+import uuid
+
+app = FastAPI()
+ 
+groceries_list: dict[int, ItemPayload] = {}
+
+customers_list: dict[int,Customer]={}
+
+bill_section: dict[int,Bill]={}
+
+@app.post("/items/")
+def add_item(item:ItemPayload)  -> Dict[str, ItemPayload]:
+    if item.units <= 0:                                                                  
+        raise HTTPException(status_code=400, detail="Quantity must be greater than 0.")
+    
+    existing_item_id = None
+    for i_id, existing in groceries_list.items():
+        if existing.item_name == item.item_name and existing.item_price == item.item_price:
+            existing.units += item.units
+            additional_price = item.item_price * item.units
+            existing.total_price += additional_price
+            return {"item": existing}
+   
+    new_id = max(groceries_list.keys(), default=-1) + 1
+    item.item_id = new_id
+    item.total_price = item.item_price * item.units
+    groceries_list[new_id] = item
+    return {"item": item}
+
+@app.get("/items/{item_id}")
+def list_item(item_id: Annotated[int, Path(title="The ID of the item to get item details")]) -> dict[str, ItemPayload]:      
+    if item_id not in groceries_list:
+        raise HTTPException(status_code=404, detail="It em not found.")
+    return {"item": groceries_list[item_id]}            
+
+@app.patch("/items/{item_id}/")
+def update_item_price(item_id: int,new_price: float,manufacture_date:date,best_before:str|None=None) -> Dict[str, Dict[str, Any]]:
+    if item_id not in groceries_list:
+        raise HTTPException(status_code=404, detail="Item not found.")
+    item: ItemPayload = groceries_list[item_id]
+    item.item_price = new_price
+    item.total_price = new_price * item.units 
+    item.manufacture_date=manufacture_date
+    item.best_before=best_before
+    return { "item": item.dict()}
+
+@app.get("/items")
+def list_items() -> dict[str, dict[int, ItemPayload]]:
+    return {"items": groceries_list}
+
+@app.get("/items/")
+async def display_items(query: Annotated[ItemPayload, Depends(list_items)]) -> ItemPayload:
+    return query
+
+@app.delete("/items/{item_id}")
+def delete_item(item_id: int) -> dict[str, str]:
+    if item_id not in groceries_list:
+        raise HTTPException(status_code=404, detail="Item not found.")
+    del groceries_list[item_id]
+    return {"result": "Item deleted."}
+
+@app.delete("/items/{item_id}/{units}")
+def remove_quantity(item_id: int, units: int) -> dict[str, str]:
+    if item_id not in groceries_list:
+        raise HTTPException(status_code=404, detail="Item not found.")
+    # if units to be removed is higher or equal to item's units, delete the item
+    if groceries_list[item_id].units <= units:
+        del groceries_list[item_id]
+        return {"result": "Item deleted."}
+    else:
+        groceries_list[item_id].units -= units
+    return {"result": f"{units} items removed."}
+
+def is_valid_length(phno:int) -> bool:
+    return len(str(phno)) == 10 
+
+def starts_with_valid_digit(phno:int) -> bool:
+    return str(phno).startswith(('6','7','8','9'))
+
+@app.post("/customers/{cus_name}/{cus_phno}")
+def add_customers(cus_name:str,cus_phno:int)  -> Dict[str, str] | Dict[str, Customer] | None:
+    if is_valid_length(cus_phno) is False :
+        return {"message": " Must be 10 digits"}
+    if starts_with_valid_digit(cus_phno) is False :
+        return {"message": " Must start with 6,7,8,9"}
+    for customer in customers_list.values():
+        if customer.customer_name == cus_name and customer.customer_phno == cus_phno:
+            return{"message":"customer already exists"}
+    customer_id: int = max(customers_list.keys(), default=0) + 1
+    customers_list[customer_id] = Customer(
+    customer_id=customer_id,customer_name=cus_name,customer_phno=cus_phno)
+    return {"customer":customers_list[customer_id]}
+
+@app.get("/customers")
+def show_customers() -> Dict[str, Dict[int, Customer]]:
+    return{"consumer":customers_list}
+
+@app.get("/customers/{cus_name}")
+def customer_details(cus_phno: int) -> Dict[str, Customer]:      
+    for customer in customers_list.values():
+        if cus_phno == customer.customer_phno:
+            return {"customer": customer}      
+    raise HTTPException(status_code=404, detail="customer details not found.")
+
+def today_date(today: date = date.today()) -> date:
+    return(today)
+
+def bill_uuidd(uuid_id:str)  -> str:
+    uuid_obj: uuid.UUID = uuid.uuid4()
+    uuid_id = str(uuid_obj)
+    return(uuid_id)
+
+def bill_uuid() -> str:
+    bill_id: int = uuid.uuid4().int % (10 ** 16)  
+    return str(bill_id)  
+
+# @app.post("bill/{bill_id}")
+# def bill_details(bill_id:str,bill_mode:LiteralString,bill_date:date):
+#     bill_section  
