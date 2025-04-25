@@ -97,9 +97,6 @@ def add_customers(cus_name:str,cus_phno:int)  -> Dict[str, str] | Dict[str, Cust
     customer_id=customer_id,customer_name=cus_name,customer_phno=cus_phno)
     return {"customer":customers_list[customer_id]}
 
-@app.get("/customers")
-def show_customers() -> Dict[str, Dict[int, Customer]]:
-    return{"consumer":customers_list}
 
 @app.get("/customers/{cus_name}")
 def customer_details(cus_phno: int) -> Dict[str, Customer]:      
@@ -120,3 +117,6 @@ def bill_uuid() -> str:
     bill_id: int = uuid.uuid4().int % (10 ** 16)  
     return str(bill_id)  
 
+@app.get("/customers")
+def show_customers() -> Dict[str, Dict[int, Customer]]:
+    return{"consumer":customers_list}
